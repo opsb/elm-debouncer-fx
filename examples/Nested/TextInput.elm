@@ -3,7 +3,6 @@ module Nested.TextInput exposing (..)
 import Debouncer
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.App
 import Html.Events as Html exposing (..)
 
 
@@ -24,16 +23,16 @@ type Msg
     | OnSettle
 
 
-subscriptions : Model -> Sub Msg
-subscriptions model =
-    Debouncer.settled 1000 "textBouncer" OnSettle
+subscriptions : String -> Model -> Sub Msg
+subscriptions bouncer model =
+    Debouncer.settled 1000 bouncer OnSettle
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+update : String -> Msg -> Model -> ( Model, Cmd Msg )
+update bouncer msg model =
     case msg of
         OnTextInput text ->
-            ( { model | textValue = text }, Debouncer.bounce "textBouncer" )
+            ( { model | textValue = text }, Debouncer.bounce bouncer )
 
         OnSettle ->
             ( { model | settledTextValue = model.textValue }, Cmd.none )

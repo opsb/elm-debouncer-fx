@@ -136,13 +136,13 @@ onEffects router cmds subs state =
             case cmd of
                 Bounce key ->
                     Time.now
-                        |> taskAndThen
+                        |> Task.andThen
                             (\time -> Platform.sendToSelf router (Bounced key time))
     in
         cmds
             |> List.map handleCommand
             |> Task.sequence
-            |> taskAndThen (\_ -> Task.succeed updatedState)
+            |> Task.andThen (\_ -> Task.succeed updatedState)
 
 
 findSubscription key state =
@@ -171,11 +171,11 @@ onSelfMsg router selfMsg state =
 
                 checkTask =
                     (Process.sleep stableAfter)
-                        |> taskAndThen (always <| Time.now)
-                        |> taskAndThen (\time -> Platform.sendToSelf router (Check key time))
+                        |> Task.andThen (always <| Time.now)
+                        |> Task.andThen (\time -> Platform.sendToSelf router (Check key time))
             in
                 (Process.spawn checkTask)
-                    |> taskAndThen (always <| Task.succeed updatedState)
+                    |> Task.andThen (always <| Task.succeed updatedState)
 
         Check key time ->
             let
@@ -195,15 +195,7 @@ onSelfMsg router selfMsg state =
                 case ( isSettled, subscription ) of
                     ( True, Just subscription ) ->
                         Platform.sendToApp router subscription.tagger
-                            |> taskAndThen (always <| Task.succeed state)
+                            |> Task.andThen (always <| Task.succeed state)
 
                     _ ->
                         Task.succeed state
-
-
-
--- HELPERS
-
-
-taskAndThen =
-    flip Task.andThen

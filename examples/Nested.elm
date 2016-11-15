@@ -2,13 +2,12 @@ module Main exposing (main)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.App
 import Html.Events as Html exposing (..)
 import Nested.TextInput
 
 
 main =
-    Html.App.program
+    Html.program
         { init = init
         , update = update
         , view = view
@@ -33,8 +32,8 @@ init =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Sub.map TextInputAMsg (Nested.TextInput.subscriptions model.textInputA)
-        , Sub.map TextInputBMsg (Nested.TextInput.subscriptions model.textInputB)
+        [ Sub.map TextInputAMsg (Nested.TextInput.subscriptions "bouncerA" model.textInputA)
+        , Sub.map TextInputBMsg (Nested.TextInput.subscriptions "bouncerB" model.textInputB)
         ]
 
 
@@ -49,7 +48,7 @@ update msg model =
         TextInputAMsg textInputMsg ->
             let
                 ( updatedTextInputA, cmd ) =
-                    Nested.TextInput.update textInputMsg model.textInputA
+                    Nested.TextInput.update "bouncerA" textInputMsg model.textInputA
             in
                 ( { model | textInputA = updatedTextInputA }
                 , Cmd.map TextInputAMsg cmd
@@ -58,7 +57,7 @@ update msg model =
         TextInputBMsg textInputMsg ->
             let
                 ( updatedTextInputB, cmd ) =
-                    Nested.TextInput.update textInputMsg model.textInputB
+                    Nested.TextInput.update "bouncerB" textInputMsg model.textInputB
             in
                 ( { model | textInputB = updatedTextInputB }
                 , Cmd.map TextInputBMsg cmd
@@ -68,6 +67,6 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div []
-        [ Html.App.map TextInputAMsg (Nested.TextInput.view model.textInputA)
-        , Html.App.map TextInputBMsg (Nested.TextInput.view model.textInputB)
+        [ Html.map TextInputAMsg (Nested.TextInput.view model.textInputA)
+        , Html.map TextInputBMsg (Nested.TextInput.view model.textInputB)
         ]

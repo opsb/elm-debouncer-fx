@@ -2,13 +2,12 @@ module Main exposing (main)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
-import Html.App
 import Html.Events as Html exposing (..)
 import Debouncer
 
 
 main =
-    Html.App.program
+    Html.program
         { init = init
         , update = update
         , view = view
