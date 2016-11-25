@@ -8,28 +8,16 @@ import Process
 
 -- TODO
 -- * cleanup after bounce
--- * single subscription per key - still need to throw error
--- TYPES
--- TYPES
 
 
 type alias State msg =
     { bouncers : Dict String Time
-    , subs : Subscriptions msg
+    , subs : Dict.Dict String (Subscription msg)
     }
 
 
 type MySub msg
     = Settled Time String msg
-
-
-type alias Subscriptions msg =
-    { settled : SubsDict msg
-    }
-
-
-type alias SubsDict msg =
-    Dict.Dict String (Subscription msg)
 
 
 type alias Subscription msg =
@@ -56,7 +44,7 @@ init : Task never (State msg)
 init =
     Task.succeed
         { bouncers = Dict.empty
-        , subs = emptySubscriptions
+        , subs = Dict.empty
         }
 
 
@@ -92,29 +80,18 @@ subMap func sub =
             Settled time key (func tagger)
 
 
-emptySubscriptions =
-    { settled = Dict.empty
-    }
-
-
-buildSubscriptions : List (MySub msg) -> Subscriptions msg
+buildSubscriptions : List (MySub msg) -> Dict String (Subscription msg)
 buildSubscriptions subs =
     let
-        addSubscription key subscription settledSubscriptions =
-            if settledSubscriptions |> Dict.member key then
-                Debug.crash ("debouncer keys must be globally unique, a duplicate was found for: " ++ key)
-            else
-                settledSubscriptions |> Dict.insert key subscription
-
         insert sub subscriptions =
             case sub of
                 Settled time key tagger ->
-                    { subscriptions
-                        | settled =
-                            subscriptions.settled |> addSubscription key (Subscription key time tagger)
-                    }
+                    if subscriptions |> Dict.member key then
+                        Debug.crash ("debouncer keys must be globally unique, a duplicate was found for: " ++ key)
+                    else
+                        subscriptions |> Dict.insert key (Subscription key time tagger)
     in
-        subs |> List.foldl insert emptySubscriptions
+        subs |> List.foldl insert Dict.empty
 
 
 
@@ -145,15 +122,6 @@ onEffects router cmds subs state =
             |> Task.andThen (\_ -> Task.succeed updatedState)
 
 
-findSubscription key state =
-    case state.subs.settled |> Dict.get key of
-        Just subscription ->
-            subscription
-
-        Nothing ->
-            Debug.crash ("not settled subscription found for " ++ key)
-
-
 
 -- HANDLE SELF MESSAGES
 
@@ -162,40 +130,38 @@ onSelfMsg : Platform.Router msg Msg -> Msg -> State msg -> Task Never (State msg
 onSelfMsg router selfMsg state =
     case (Debug.log "onSelfMsg" selfMsg) of
         Bounced key time ->
-            let
-                stableAfter =
-                    findSubscription key state |> .stableAfter
+            case state.subs |> Dict.get key of
+                Nothing ->
+                    Task.succeed state
 
-                updatedState =
-                    { state | bouncers = state.bouncers |> Dict.insert key time }
+                Just subscription ->
+                    let
+                        updatedState =
+                            { state | bouncers = state.bouncers |> Dict.insert key time }
 
-                checkTask =
-                    (Process.sleep stableAfter)
-                        |> Task.andThen (always <| Time.now)
-                        |> Task.andThen (\time -> Platform.sendToSelf router (Check key time))
-            in
-                (Process.spawn checkTask)
-                    |> Task.andThen (always <| Task.succeed updatedState)
+                        checkTask =
+                            (Process.sleep subscription.stableAfter)
+                                |> Task.andThen (always <| Time.now)
+                                |> Task.andThen (\time -> Platform.sendToSelf router (Check key time))
+                    in
+                        (Process.spawn checkTask)
+                            |> Task.andThen (always <| Task.succeed updatedState)
 
         Check key time ->
-            let
-                stableAfter =
-                    findSubscription key state |> .stableAfter
+            case state.subs |> Dict.get key of
+                Nothing ->
+                    Task.succeed state
 
-                isSettled =
-                    state.bouncers
-                        |> Dict.get key
-                        |> Maybe.map (\lastBounce -> lastBounce < (time - stableAfter))
-                        |> Maybe.withDefault True
-
-                subscription =
-                    state.subs.settled
-                        |> Dict.get key
-            in
-                case ( isSettled, subscription ) of
-                    ( True, Just subscription ) ->
-                        Platform.sendToApp router subscription.tagger
-                            |> Task.andThen (always <| Task.succeed state)
-
-                    _ ->
-                        Task.succeed state
+                Just subscription ->
+                    let
+                        isSettled =
+                            state.bouncers
+                                |> Dict.get key
+                                |> Maybe.map (\lastBounce -> lastBounce < (time - subscription.stableAfter))
+                                |> Maybe.withDefault True
+                    in
+                        if isSettled then
+                            Platform.sendToApp router subscription.tagger
+                                |> Task.andThen (always <| Task.succeed state)
+                        else
+                            Task.succeed state
